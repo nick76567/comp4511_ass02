@@ -6,9 +6,11 @@
 #include <sys/types.h>
 
 
-
+#define MAX_PROGRAM_NAME_LEN 128
 #define MAX_CMDLINE_LEN 256
-#define MAX_DIR_LEN 1024
+#define MAX_OPTION_LEN ((MAX_CMDLINE_LEN - MAX_PROGRAM_NAME_LEN) / 2 - 2)
+#define MAX_ARG_ADDRERSS_LEN (MAX_CMDLINE_LEN - MAX_OPTION_LEN)
+#define MAX_DIR_LEN 512
 
 
 /* function prototypes go here... */
@@ -38,7 +40,28 @@ int main()
 void process_cmd(char *cmdline)
 {
 	// printf("%s\n", cmdline);
+    char *token, program_name[MAX_PROGRAM_NAME_LEN], option[MAX_OPTION_LEN];
+    char arg_address[MAX_ARG_ADDRERSS_LEN];
+    unsigned int option_num = 0;
+    token = strtok(cmdline, " \t");
+    strcpy(program_name, token);
+    token = strtok(NULL, " \t");
 
+    while(token != NULL){
+        if(token[0] == '-'){
+            option_num += (strlen(token) - 1);
+            strcat(option, token + 1);
+        }else if(token[0] == '&'){
+            //background process
+        }else if(token[0] == '/'){
+            strcpy(arg_address, token);
+        }
+        token = strtok(NULL, " \t");
+    }
+
+    printf("Program_name: %s\n", program_name);
+    printf("Option: %s\n", option);
+    printf("arg_address: %s\n", arg_address);
 }
 
 
