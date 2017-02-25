@@ -5,13 +5,15 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <dirent.h>
 
 
 #define MAX_PROGRAM_NAME_LEN 128
 #define MAX_CMDLINE_LEN 256
 #define MAX_OPTION_LEN ((MAX_CMDLINE_LEN - MAX_PROGRAM_NAME_LEN) / 2 - 2)
 #define MAX_ARG_ADDRERSS_LEN (MAX_CMDLINE_LEN - MAX_OPTION_LEN)
-#define MAX_DIR_LEN 512
+#define MAX_DIR_LEN 256
+#define MAX_ENV_PATH_LEN 1024
 
 
 /* function prototypes go here... */
@@ -21,7 +23,8 @@ int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
 unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address);
-bool search_directory(char *program_name);
+bool search_directory(char *program_name, char *directory);
+bool search_env_path_directory(char *program_name);
 
 /* The main function implementation */
 int main()
@@ -61,12 +64,43 @@ unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, 
     return option_num;
 }
 
-bool search_directory(char *program_name){
+bool search_directory(char *program_name, char *directory){
     char buffer[MAX_DIR_LEN];
-    getcwd(buffer, MAX_DIR_LEN);
 
-    opendir(buffer);
+    if(directory == NULL){
+        getcwd(buffer, MAX_DIR_LEN);
+    }else{
+        strcpy(buffer, directory);
+    }
     
+    struct dirent **namelist;
+    int n;
+    bool result = false;
+
+    n = scandir(buffer, &namelist, NULL, NULL);
+    if(n >= 0){
+        while(n--){
+            if(strcmp(namelist[n]->d_name, program_name) == 0) result = true;
+            free(namelist[n]);
+        }
+        free(namelist);     
+    }  
+    return result;
+}
+
+bool search_env_path_directory(char *program_name){
+    char env_path_buffer[MAX_ENV_PATH_LEN];
+    strcpy(env_path_buffer, getenv("PATH"));
+
+    char *token = strtok(env_path_buffer, ":");
+    
+    while(token != NULL){
+        if(search_directory(program_name, token)){
+            //printf("Found in %s\n", token);
+            return true;
+        }
+        token = strtok(NULL, ":");
+    }  
     return false;
 }
 
@@ -77,6 +111,10 @@ void process_cmd(char *cmdline)
     char arg_address[MAX_ARG_ADDRERSS_LEN] = {0};
     unsigned int option_num = input_arg_handler(cmdline, program_name, option, arg_address);
     
+    if(!search_directory(program_name, NULL) && !search_env_path_directory(program_name)){
+        printf("%s: Command not found.\n", program_name);
+    }
+
 /*
     printf("Program_name: %s\n", program_name);
     printf("Option: %s\n", option);
