@@ -5,8 +5,8 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <dirent.h>
-
 
 #define MAX_PROGRAM_NAME_LEN 128
 #define MAX_CMDLINE_LEN 256
@@ -25,6 +25,8 @@ void process_cmd(char *cmdline);
 unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address);
 bool search_directory(char *program_name, char *directory);
 bool search_env_path_directory(char *program_name);
+void create_child(char *time);
+
 
 /* The main function implementation */
 int main()
@@ -55,7 +57,7 @@ unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, 
             strcat(option, token + 1);
         }else if(token[0] == '&'){
             //background process
-        }else if(token[0] == '/'){
+        }else{
             strcpy(arg_address, token);
         }
         token = strtok(NULL, " \t");
@@ -104,22 +106,38 @@ bool search_env_path_directory(char *program_name){
     return false;
 }
 
+void create_child(char *time){
+    int status;
+    pid_t pid = fork();
+
+    if(pid > 0){
+        printf("child pid %d is started\n", pid);
+        wait(&status);
+        printf("child pid %d is terminated with status %d\n", pid, status);
+    }else if(pid == 0){
+        sleep(atoi(time));
+        exit(0);
+    }else{
+        printf("Error\n");
+    }
+
+}
+
 void process_cmd(char *cmdline)
 {
-	// printf("%s\n", cmdline);
     char program_name[MAX_PROGRAM_NAME_LEN], option[MAX_OPTION_LEN];
     char arg_address[MAX_ARG_ADDRERSS_LEN] = {0};
     unsigned int option_num = input_arg_handler(cmdline, program_name, option, arg_address);
     
-    if(!search_directory(program_name, NULL) && !search_env_path_directory(program_name)){
+    if(strcmp(program_name, "exit") == 0){
+        exit(0);
+    } else if(strcmp(program_name, "cd") == 0){
+        if(chdir(arg_address) == -1) printf("Path not found\n");
+    } else if(strcmp(program_name, "child") == 0){
+        create_child(arg_address);
+    } else if(!search_directory(program_name, NULL) && !search_env_path_directory(program_name)){
         printf("%s: Command not found.\n", program_name);
     }
-
-/*
-    printf("Program_name: %s\n", program_name);
-    printf("Option: %s\n", option);
-    printf("arg_address: %s\n", arg_address);
-*/
 }
 
 
