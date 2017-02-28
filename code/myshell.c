@@ -22,11 +22,11 @@ void show_prompt();
 int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
-unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address);
+void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address);
 bool search_directory(char *program_name, char *directory);
 bool search_env_path_directory(char *program_name);
 void create_child(char *time);
-
+void create_linux_program_child(char *program_name, char *option, char *arg_address);
 
 /* The main function implementation */
 int main()
@@ -44,16 +44,18 @@ int main()
 	return 0;
 }
 
-unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address){
+void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address){
+
     char *token;
-    unsigned int option_num = 0;
+   // unsigned int option_num = 0;
     token = strtok(cmdline, " \t");
     strcpy(program_name, token);
     token = strtok(NULL, " \t");
 
     while(token != NULL){
         if(token[0] == '-'){
-            option_num += (strlen(token) - 1);
+            if(option[0] == '\0') option[0] = '-';
+            //option_num += (strlen(token) - 1);
             strcat(option, token + 1);
         }else if(token[0] == '&'){
             //background process
@@ -63,7 +65,7 @@ unsigned int input_arg_handler(char *cmdline, char *program_name, char *option, 
         token = strtok(NULL, " \t");
     }
 
-    return option_num;
+    //return option_num;
 }
 
 bool search_directory(char *program_name, char *directory){
@@ -123,12 +125,25 @@ void create_child(char *time){
 
 }
 
+void create_linux_program_child(char *program_name, char *option, char *arg_address){
+    pid_t pid = fork();
+
+    if(pid == 0){
+        if(arg_address[0] == '\0') execlp(program_name, program_name, option, NULL);
+        else execlp(program_name, program_name, option, arg_address, NULL);
+    }else if(pid > 0){
+        wait(0);
+    }else{
+        printf("Error.\n");
+    }
+}
+
 void process_cmd(char *cmdline)
 {
-    char program_name[MAX_PROGRAM_NAME_LEN], option[MAX_OPTION_LEN];
+    char program_name[MAX_PROGRAM_NAME_LEN] = {0}, option[MAX_OPTION_LEN] = {0};
     char arg_address[MAX_ARG_ADDRERSS_LEN] = {0};
-    unsigned int option_num = input_arg_handler(cmdline, program_name, option, arg_address);
-    
+    input_arg_handler(cmdline, program_name, option, arg_address);
+
     if(strcmp(program_name, "exit") == 0){
         exit(0);
     } else if(strcmp(program_name, "cd") == 0){
@@ -137,6 +152,8 @@ void process_cmd(char *cmdline)
         create_child(arg_address);
     } else if(!search_directory(program_name, NULL) && !search_env_path_directory(program_name)){
         printf("%s: Command not found.\n", program_name);
+    } else {
+        create_linux_program_child(program_name, option, arg_address);
     }
 }
 
