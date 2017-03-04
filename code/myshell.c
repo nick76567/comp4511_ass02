@@ -47,7 +47,6 @@ int main()
 void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address){
 
     char *token;
-   // unsigned int option_num = 0;
     token = strtok(cmdline, " \t");
     strcpy(program_name, token);
     token = strtok(NULL, " \t");
@@ -55,7 +54,6 @@ void input_arg_handler(char *cmdline, char *program_name, char *option, char *ar
     while(token != NULL){
         if(token[0] == '-'){
             if(option[0] == '\0') option[0] = '-';
-            //option_num += (strlen(token) - 1);
             strcat(option, token + 1);
         }else if(token[0] == '&'){
             //background process
@@ -64,50 +62,48 @@ void input_arg_handler(char *cmdline, char *program_name, char *option, char *ar
         }
         token = strtok(NULL, " \t");
     }
-
-    //return option_num;
 }
+/*
+    bool search_directory(char *program_name, char *directory){
+        char buffer[MAX_DIR_LEN];
 
-bool search_directory(char *program_name, char *directory){
-    char buffer[MAX_DIR_LEN];
+        if(directory == NULL){
+            getcwd(buffer, MAX_DIR_LEN);
+        }else{
+            strcpy(buffer, directory);
+        }
+        
+        struct dirent **namelist;
+        int n;
+        bool result = false;
 
-    if(directory == NULL){
-        getcwd(buffer, MAX_DIR_LEN);
-    }else{
-        strcpy(buffer, directory);
+        n = scandir(buffer, &namelist, NULL, NULL);
+        if(n >= 0){
+            while(n--){
+                if(strcmp(namelist[n]->d_name, program_name) == 0) result = true;
+                free(namelist[n]);
+            }
+            free(namelist);     
+        }  
+        return result;
     }
-    
-    struct dirent **namelist;
-    int n;
-    bool result = false;
 
-    n = scandir(buffer, &namelist, NULL, NULL);
-    if(n >= 0){
-        while(n--){
-            if(strcmp(namelist[n]->d_name, program_name) == 0) result = true;
-            free(namelist[n]);
-        }
-        free(namelist);     
-    }  
-    return result;
-}
+    bool search_env_path_directory(char *program_name){
+        char env_path_buffer[MAX_ENV_PATH_LEN];
+        strcpy(env_path_buffer, getenv("PATH"));
 
-bool search_env_path_directory(char *program_name){
-    char env_path_buffer[MAX_ENV_PATH_LEN];
-    strcpy(env_path_buffer, getenv("PATH"));
-
-    char *token = strtok(env_path_buffer, ":");
-    
-    while(token != NULL){
-        if(search_directory(program_name, token)){
-            //printf("Found in %s\n", token);
-            return true;
-        }
-        token = strtok(NULL, ":");
-    }  
-    return false;
-}
-
+        char *token = strtok(env_path_buffer, ":");
+        
+        while(token != NULL){
+            if(search_directory(program_name, token)){
+                //printf("Found in %s\n", token);
+                return true;
+            }
+            token = strtok(NULL, ":");
+        }  
+        return false;
+    }
+*/
 void create_child(char *time){
     int status;
     pid_t pid = fork();
@@ -129,8 +125,21 @@ void create_linux_program_child(char *program_name, char *option, char *arg_addr
     pid_t pid = fork();
 
     if(pid == 0){
-        if(arg_address[0] == '\0') execlp(program_name, program_name, option, NULL);
-        else execlp(program_name, program_name, option, arg_address, NULL);
+        int result = -1;
+        if(arg_address[0] == '\0' && option[0] == '\0'){
+            result = execlp(program_name, program_name, (char *)NULL);
+        }else if(arg_address[0] == '\0'){
+            result = execlp(program_name, program_name, option, (char *)NULL);
+        }else if(option[0] == '\0'){
+            result = execlp(program_name, program_name, arg_address, (char *)NULL);
+        }else{
+            result = execlp(program_name, program_name, option, arg_address, (char *)NULL);
+        }
+
+        if(result < 0){
+            printf("%s: Command not found.\n", program_name);
+        }
+        exit(0); 
     }else if(pid > 0){
         wait(0);
     }else{
@@ -146,13 +155,11 @@ void process_cmd(char *cmdline)
 
     if(strcmp(program_name, "exit") == 0){
         exit(0);
-    } else if(strcmp(program_name, "cd") == 0){
+    }else if(strcmp(program_name, "cd") == 0){
         if(chdir(arg_address) == -1) printf("Path not found\n");
-    } else if(strcmp(program_name, "child") == 0){
+    }else if(strcmp(program_name, "child") == 0){
         create_child(arg_address);
-    } else if(!search_directory(program_name, NULL) && !search_env_path_directory(program_name)){
-        printf("%s: Command not found.\n", program_name);
-    } else {
+    }else{
         create_linux_program_child(program_name, option, arg_address);
     }
 }
