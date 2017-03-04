@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -22,17 +23,28 @@ void show_prompt();
 int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
-void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address);
-bool search_directory(char *program_name, char *directory);
-bool search_env_path_directory(char *program_name);
+void handle_sigchld(int sig);
+void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background);
+//bool search_directory(char *program_name, char *directory);
+//bool search_env_path_directory(char *program_name);
 void create_child(char *time);
-void create_linux_program_child(char *program_name, char *option, char *arg_address);
+void create_linux_program_child(char *program_name, char *option, char *arg_address, char *background);
 
 /* The main function implementation */
 int main()
 {
 	char cmdline[MAX_CMDLINE_LEN];
 	
+	//reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
+	struct sigaction sa;
+	sa.sa_handler = &handle_sigchld;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+	if (sigaction(SIGCHLD, &sa, 0) == -1) {
+	  perror(0);
+	  exit(1);
+	}
+
 	while (1) 
 	{
 		show_prompt();
@@ -40,11 +52,19 @@ int main()
 			continue; /* empty line handling */
 		
 		process_cmd(cmdline);
+
 	}
 	return 0;
 }
 
-void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address){
+//reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
+void handle_sigchld(int sig) {
+  int saved_errno = errno;
+  while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
+  errno = saved_errno;
+}
+
+void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background){
 
     char *token;
     token = strtok(cmdline, " \t");
@@ -56,7 +76,7 @@ void input_arg_handler(char *cmdline, char *program_name, char *option, char *ar
             if(option[0] == '\0') option[0] = '-';
             strcat(option, token + 1);
         }else if(token[0] == '&'){
-            //background process
+            *background = '&';
         }else{
             strcpy(arg_address, token);
         }
@@ -121,10 +141,15 @@ void create_child(char *time){
 
 }
 
-void create_linux_program_child(char *program_name, char *option, char *arg_address){
+void create_linux_program_child(char *program_name, char *option, char *arg_address, char *background){
     pid_t pid = fork();
 
-    if(pid == 0){
+    if(pid > 0){
+    	if(*background == '\0'){
+        	wait(0);
+    	}
+ 
+    }else if(pid == 0){
         int result = -1;
         if(arg_address[0] == '\0' && option[0] == '\0'){
             result = execlp(program_name, program_name, (char *)NULL);
@@ -140,18 +165,17 @@ void create_linux_program_child(char *program_name, char *option, char *arg_addr
             printf("%s: Command not found.\n", program_name);
         }
         exit(0); 
-    }else if(pid > 0){
-        wait(0);
     }else{
         printf("Error.\n");
     }
+
 }
 
 void process_cmd(char *cmdline)
 {
     char program_name[MAX_PROGRAM_NAME_LEN] = {0}, option[MAX_OPTION_LEN] = {0};
-    char arg_address[MAX_ARG_ADDRERSS_LEN] = {0};
-    input_arg_handler(cmdline, program_name, option, arg_address);
+    char arg_address[MAX_ARG_ADDRERSS_LEN] = {0}, background = '\0';
+    input_arg_handler(cmdline, program_name, option, arg_address, &background);
 
     if(strcmp(program_name, "exit") == 0){
         exit(0);
@@ -160,7 +184,7 @@ void process_cmd(char *cmdline)
     }else if(strcmp(program_name, "child") == 0){
         create_child(arg_address);
     }else{
-        create_linux_program_child(program_name, option, arg_address);
+        create_linux_program_child(program_name, option, arg_address, &background);
     }
 }
 
