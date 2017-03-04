@@ -1,13 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <errno.h>
-
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <dirent.h>
+
 
 #define MAX_PROGRAM_NAME_LEN 128
 #define MAX_CMDLINE_LEN 256
@@ -18,24 +16,23 @@
 
 
 /* function prototypes go here... */
-
 void show_prompt();
 int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
 void handle_sigchld(int sig);
 void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background);
-//bool search_directory(char *program_name, char *directory);
-//bool search_env_path_directory(char *program_name);
 void create_child(char *time);
 void create_linux_program_child(char *program_name, char *option, char *arg_address, char *background);
+void change_dir(char *arg_address);
 
 /* The main function implementation */
 int main()
 {
 	char cmdline[MAX_CMDLINE_LEN];
 	
-	//reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
+	
+    //reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
 	struct sigaction sa;
 	sa.sa_handler = &handle_sigchld;
 	sigemptyset(&sa.sa_mask);
@@ -45,6 +42,7 @@ int main()
 	  exit(1);
 	}
 
+
 	while (1) 
 	{
 		show_prompt();
@@ -52,7 +50,6 @@ int main()
 			continue; /* empty line handling */
 		
 		process_cmd(cmdline);
-
 	}
 	return 0;
 }
@@ -65,7 +62,6 @@ void handle_sigchld(int sig) {
 }
 
 void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background){
-
     char *token;
     token = strtok(cmdline, " \t");
     strcpy(program_name, token);
@@ -83,47 +79,7 @@ void input_arg_handler(char *cmdline, char *program_name, char *option, char *ar
         token = strtok(NULL, " \t");
     }
 }
-/*
-    bool search_directory(char *program_name, char *directory){
-        char buffer[MAX_DIR_LEN];
 
-        if(directory == NULL){
-            getcwd(buffer, MAX_DIR_LEN);
-        }else{
-            strcpy(buffer, directory);
-        }
-        
-        struct dirent **namelist;
-        int n;
-        bool result = false;
-
-        n = scandir(buffer, &namelist, NULL, NULL);
-        if(n >= 0){
-            while(n--){
-                if(strcmp(namelist[n]->d_name, program_name) == 0) result = true;
-                free(namelist[n]);
-            }
-            free(namelist);     
-        }  
-        return result;
-    }
-
-    bool search_env_path_directory(char *program_name){
-        char env_path_buffer[MAX_ENV_PATH_LEN];
-        strcpy(env_path_buffer, getenv("PATH"));
-
-        char *token = strtok(env_path_buffer, ":");
-        
-        while(token != NULL){
-            if(search_directory(program_name, token)){
-                //printf("Found in %s\n", token);
-                return true;
-            }
-            token = strtok(NULL, ":");
-        }  
-        return false;
-    }
-*/
 void create_child(char *time){
     int status;
     pid_t pid = fork();
@@ -146,10 +102,10 @@ void create_linux_program_child(char *program_name, char *option, char *arg_addr
 
     if(pid > 0){
     	if(*background == '\0'){
-        	wait(0);
+        	waitpid(pid, 0, 0);
     	}
- 
     }else if(pid == 0){
+
         int result = -1;
         if(arg_address[0] == '\0' && option[0] == '\0'){
             result = execlp(program_name, program_name, (char *)NULL);
@@ -171,6 +127,17 @@ void create_linux_program_child(char *program_name, char *option, char *arg_addr
 
 }
 
+void change_dir(char *arg_address){
+    int result = 0;
+    if(arg_address[0] == '\0'){
+        result = chdir(getenv("HOME"));
+    }else{
+        result = chdir(arg_address);
+    }
+
+    if(result == -1) printf("Path not found\n"); 
+}
+
 void process_cmd(char *cmdline)
 {
     char program_name[MAX_PROGRAM_NAME_LEN] = {0}, option[MAX_OPTION_LEN] = {0};
@@ -180,7 +147,7 @@ void process_cmd(char *cmdline)
     if(strcmp(program_name, "exit") == 0){
         exit(0);
     }else if(strcmp(program_name, "cd") == 0){
-        if(chdir(arg_address) == -1) printf("Path not found\n");
+        change_dir(arg_address);
     }else if(strcmp(program_name, "child") == 0){
         create_child(arg_address);
     }else{
