@@ -7,12 +7,8 @@
 #include <sys/wait.h>
 
 
-#define MAX_PROGRAM_NAME_LEN 128
 #define MAX_CMDLINE_LEN 256
-#define MAX_OPTION_LEN ((MAX_CMDLINE_LEN - MAX_PROGRAM_NAME_LEN) / 2 - 2)
-#define MAX_ARG_ADDRERSS_LEN (MAX_CMDLINE_LEN - MAX_OPTION_LEN)
 #define MAX_DIR_LEN 256
-#define MAX_ENV_PATH_LEN 1024
 
 
 /* function prototypes go here... */
@@ -21,18 +17,18 @@ int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
 void handle_sigchld(int sig);
-void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background);
+int input_arg_handler(char *cmdline, char **argc, char *background);
 void create_child(char *time);
-void create_linux_program_child(char *program_name, char *option, char *arg_address, char *background);
+void create_linux_program_child(char **argc, char *background);
 void change_dir(char *arg_address);
 
 /* The main function implementation */
 int main()
 {
 	char cmdline[MAX_CMDLINE_LEN];
-	
-	
-    //reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
+		
+    // reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
+    // sigchld handle register
 	struct sigaction sa;
 	sa.sa_handler = &handle_sigchld;
 	sigemptyset(&sa.sa_mask);
@@ -61,23 +57,22 @@ void handle_sigchld(int sig) {
   errno = saved_errno;
 }
 
-void input_arg_handler(char *cmdline, char *program_name, char *option, char *arg_address, char *background){
+int input_arg_handler(char *cmdline, char **argc, char *background){
     char *token;
+    int argv = 0;
     token = strtok(cmdline, " \t");
-    strcpy(program_name, token);
-    token = strtok(NULL, " \t");
 
     while(token != NULL){
-        if(token[0] == '-'){
-            if(option[0] == '\0') option[0] = '-';
-            strcat(option, token + 1);
-        }else if(token[0] == '&'){
+        if(token[0] == '&'){
             *background = '&';
         }else{
-            strcpy(arg_address, token);
+            argc[argv] = (char *) malloc(sizeof(char) * (strlen(token) + 1));
+			strcpy(argc[argv++], token);
         }
         token = strtok(NULL, " \t");
     }
+
+    return argv;
 }
 
 void create_child(char *time){
@@ -86,18 +81,18 @@ void create_child(char *time){
 
     if(pid > 0){
         printf("child pid %d is started\n", pid);
-        wait(&status);
+        pid = waitpid(pid, &status, 0);
         printf("child pid %d is terminated with status %d\n", pid, status);
     }else if(pid == 0){
         sleep(atoi(time));
         exit(0);
     }else{
-        printf("Error\n");
+        printf("Fail to create child\n");
     }
 
 }
 
-void create_linux_program_child(char *program_name, char *option, char *arg_address, char *background){
+void create_linux_program_child(char **argc, char *background){
     pid_t pid = fork();
 
     if(pid > 0){
@@ -105,31 +100,20 @@ void create_linux_program_child(char *program_name, char *option, char *arg_addr
         	waitpid(pid, 0, 0);
     	}
     }else if(pid == 0){
+        int result = execvp(argc[0], argc);
 
-        int result = -1;
-        if(arg_address[0] == '\0' && option[0] == '\0'){
-            result = execlp(program_name, program_name, (char *)NULL);
-        }else if(arg_address[0] == '\0'){
-            result = execlp(program_name, program_name, option, (char *)NULL);
-        }else if(option[0] == '\0'){
-            result = execlp(program_name, program_name, arg_address, (char *)NULL);
-        }else{
-            result = execlp(program_name, program_name, option, arg_address, (char *)NULL);
-        }
+        if(result < 0) printf("%s: Command not found.\n", argc[0]);
 
-        if(result < 0){
-            printf("%s: Command not found.\n", program_name);
-        }
-        exit(0); 
+        _exit(0); 
     }else{
-        printf("Error.\n");
+        printf("Fail to create child.\n");
     }
-
 }
 
 void change_dir(char *arg_address){
     int result = 0;
-    if(arg_address[0] == '\0'){
+
+    if(arg_address == '\0'){
         result = chdir(getenv("HOME"));
     }else{
         result = chdir(arg_address);
@@ -140,19 +124,21 @@ void change_dir(char *arg_address){
 
 void process_cmd(char *cmdline)
 {
-    char program_name[MAX_PROGRAM_NAME_LEN] = {0}, option[MAX_OPTION_LEN] = {0};
-    char arg_address[MAX_ARG_ADDRERSS_LEN] = {0}, background = '\0';
-    input_arg_handler(cmdline, program_name, option, arg_address, &background);
+   	char *argc[32] = {NULL}, background = '\0';
+    int i, argv = input_arg_handler(cmdline, argc, &background);
 
-    if(strcmp(program_name, "exit") == 0){
+    if(strcmp(argc[0], "exit") == 0){
+    	for(i = 0; i < argv; i++){free(argc[i]);}
         exit(0);
-    }else if(strcmp(program_name, "cd") == 0){
-        change_dir(arg_address);
-    }else if(strcmp(program_name, "child") == 0){
-        create_child(arg_address);
+    }else if(strcmp(argc[0], "cd") == 0){
+        change_dir(argc[1]);
+    }else if(strcmp(argc[0], "child") == 0){
+        create_child(argc[1]);
     }else{
-        create_linux_program_child(program_name, option, arg_address, &background);
+        create_linux_program_child(argc, &background);
     }
+
+    for(i = 0; i < argv; i++) free(argc[i]);
 }
 
 
