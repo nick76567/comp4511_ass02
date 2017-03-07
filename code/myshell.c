@@ -132,7 +132,7 @@ void process_cmd(char *cmdline)
     int i, argv = input_arg_handler(cmdline, argc, &background);
 
     if(strcmp(argc[0], "exit") == 0){
-    	for(i = 0; i < argv; i++){free(argc[i]);}
+    	for(i = 0; i < argv; i++) free(argc[i]);
         exit(0);
     }else if(strcmp(argc[0], "cd") == 0){
         change_dir(argc[1]);
@@ -141,6 +141,7 @@ void process_cmd(char *cmdline)
     }else{
         create_linux_program_child(argc, &background);
     }
+
 
     for(i = 0; i < argv; i++) free(argc[i]);
 }
