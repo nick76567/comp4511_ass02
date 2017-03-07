@@ -18,7 +18,7 @@ void process_cmd(char *cmdline);
 
 void handle_sigchld(int sig);
 int input_arg_handler(char *cmdline, char **argc, char *background);
-void create_child(char *time);
+void create_child(char *time, char **argc, int argv);
 void create_linux_program_child(char **argc, char *background);
 void change_dir(char *arg_address);
 
@@ -75,7 +75,7 @@ int input_arg_handler(char *cmdline, char **argc, char *background){
     return argv;
 }
 
-void create_child(char *time){
+void create_child(char *time, char ** argc, int argv){
     int status;
     pid_t pid = fork();
 
@@ -85,7 +85,11 @@ void create_child(char *time){
         printf("child pid %d is terminated with status %d\n", pid, status);
     }else if(pid == 0){
         sleep(atoi(time));
-        exit(0);
+
+        int i;
+        for(i = 0; i < argv; i++) free(argc[i]);
+
+        _exit(0);
     }else{
         printf("Fail to create child\n");
     }
@@ -133,7 +137,7 @@ void process_cmd(char *cmdline)
     }else if(strcmp(argc[0], "cd") == 0){
         change_dir(argc[1]);
     }else if(strcmp(argc[0], "child") == 0){
-        create_child(argc[1]);
+        create_child(argc[1], argc, argv);
     }else{
         create_linux_program_child(argc, &background);
     }
